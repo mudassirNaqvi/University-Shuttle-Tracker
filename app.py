@@ -2,10 +2,13 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_socketio import SocketIO, emit
 import json
 import os
+import eventlet
+
+eventlet.monkey_patch()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 LOCATION_FILE = "location.json"
 
@@ -14,7 +17,7 @@ def load_location():
         with open(LOCATION_FILE) as f:
             return json.load(f)
     except FileNotFoundError:
-        return {"lat": 24.9456, "lon": 67.0897}  # default location
+        return {"lat": 24.9456, "lon": 67.0897}
 
 def save_location(lat, lon):
     with open(LOCATION_FILE, "w") as f:
@@ -46,12 +49,10 @@ def update_location():
 
     return jsonify({"status": "error", "message": "Missing lat/lon"}), 400
 
-# ✅ Serve service-worker.js from static folder
 @app.route("/service-worker.js")
 def service_worker():
     return send_from_directory("static", "service-worker.js")
 
-# ✅ Serve manifest.json from static folder
 @app.route("/manifest.json")
 def manifest():
     return send_from_directory("static", "manifest.json")
