@@ -63,6 +63,7 @@ def service_worker():
 def manifest():
     return send_from_directory("static", "manifest.json")
 
-# Run app with eventlet (production-safe)
+# Run app with eventlet (Render-compatible port binding)
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))  # Use Render's PORT or fallback to 5000
+    socketio.run(app, host="0.0.0.0", port=port)
