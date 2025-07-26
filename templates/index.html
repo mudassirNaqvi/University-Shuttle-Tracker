@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>University Shuttle Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- ✅ PWA Meta -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#1976d2" />
+  <link rel="apple-touch-icon" href="/static/icons/icon-192x192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <!-- ✅ Google Fonts & Leaflet -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+  <!-- ✅ Custom Styles -->
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: #f5f7fa;
+    }
+
+    header {
+      background-color: #1976d2;
+      color: white;
+      padding: 15px 20px;
+      text-align: center;
+      font-size: 22px;
+      font-weight: 600;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    #map {
+      height: calc(100vh - 60px);
+      width: 100%;
+      z-index: 1;
+    }
+
+    #install-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 999;
+      padding: 14px 18px;
+      font-size: 15px;
+      background-color: #1976d2;
+      color: white;
+      border: none;
+      border-radius: 50px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      display: none;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    #install-btn:hover {
+      background-color: #0d5cb6;
+    }
+
+    .rotated-icon {
+      transform-origin: center;
+    }
+  </style>
+</head>
+<body>
+  <header>🎓 University Shuttle Tracker</header>
+  <div id="map"></div>
+  <button id="install-btn">📥 Install App</button>
+
+  <!-- ✅ Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    let map, marker, previousPos = null;
+
+    async function initMap() {
+      const response = await fetch("/location");
+      const data = await response.json();
+      const position = [data.lat, data.lon];
+
+      map = L.map('map').setView(position, 17);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 20,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      const vanIconDiv = L.divIcon({
+        html: `<img id="van-img" src="/static/van.png" width="50" height="50" style="transform: rotate(0deg);" class="rotated-icon">`,
+        iconSize: [50, 50],
+        className: ""
+      });
+
+      marker = L.marker(position, { icon: vanIconDiv }).addTo(map).bindPopup("University Van").openPopup();
+      previousPos = position;
+    }
+
+    function calculateBearing(from, to) {
+      const [lat1, lon1] = from;
+      const [lat2, lon2] = to;
+      const rad = Math.PI / 180;
+      const y = Math.sin((lon2 - lon1) * rad) * Math.cos(lat2 * rad);
+      const x = Math.cos(lat1 * rad) * Math.sin(lat2 * rad) -
+                Math.sin(lat1 * rad) * Math.cos(lat2 * rad) * Math.cos((lon2 - lon1) * rad);
+      const angle = Math.atan2(y, x) * (180 / Math.PI);
+      return (angle + 360) % 360;
+    }
+
+    function animateMarker(from, to, duration = 1000) {
+      const start = performance.now();
+      function animate(time) {
+        const elapsed = time - start;
+        const progress = Math.min(elapsed / duration, 1);
+        const lat = from[0] + (to[0] - from[0]) * progress;
+        const lon = from[1] + (to[1] - from[1]) * progress;
+        marker.setLatLng([lat, lon]);
+        if (progress < 1) requestAnimationFrame(animate);
+      }
+      requestAnimationFrame(animate);
+    }
+
+    function updateLocation(lat, lon) {
+      const newPos = [lat, lon];
+      if (previousPos) {
+        const heading = calculateBearing(previousPos, newPos);
+        const vanImg = document.getElementById("van-img");
+        if (vanImg) vanImg.style.transform = `rotate(${heading}deg)`;
+      }
+      animateMarker(previousPos, newPos);
+      map.setView(newPos);
+      previousPos = newPos;
+    }
+
+    initMap();
+    const socket = io();
+    socket.on("location_update", (data) => {
+      updateLocation(data.lat, data.lon);
+    });
+
+    // PWA install logic
+    let deferredPrompt;
+    const installBtn = document.getElementById("install-btn");
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.style.display = "block";
+    });
+
+    installBtn.addEventListener("click", () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(choiceResult => {
+          if (choiceResult.outcome === 'accepted') {
+            console.log('User accepted install');
+          }
+          deferredPrompt = null;
+          installBtn.style.display = "none";
+        });
+      }
+    });
+
+    // Service Worker registration
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then(reg => console.log('Service Worker registered!', reg))
+        .catch(err => console.error('SW registration failed:', err));
+    }
+  </script>
+</body>
+</html>
