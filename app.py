@@ -3,9 +3,10 @@ from flask_socketio import SocketIO, emit
 import json
 import os
 import eventlet
-eventlet.monkey_patch()  # Required for eventlet to work with Flask-SocketIO
 
-app = Flask(__name__)
+eventlet.monkey_patch()
+
+app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
@@ -17,24 +18,24 @@ def load_location():
         with open(LOCATION_FILE) as f:
             return json.load(f)
     except FileNotFoundError:
-        return {"lat": 24.9456, "lon": 67.0897}  # Default location (e.g., university gate)
+        return {"lat": 24.9456, "lon": 67.0897}  # Default location
 
 # Save current shuttle location
 def save_location(lat, lon):
     with open(LOCATION_FILE, "w") as f:
         json.dump({"lat": lat, "lon": lon}, f)
 
-# Main index page (student side map)
+# Home page (student side)
 @app.route("/")
 def index():
     return render_template("index.html")
 
-# API endpoint to get current shuttle location
+# Endpoint to get current shuttle location
 @app.route("/location", methods=["GET"])
 def get_location():
     return jsonify(load_location())
 
-# API to update shuttle location (from driver app)
+# Endpoint to update shuttle location (driver side)
 @app.route("/update", methods=["POST"])
 def update_location():
     data = request.get_json(force=True)
@@ -53,17 +54,22 @@ def update_location():
 
     return jsonify({"status": "error", "message": "Missing lat/lon"}), 400
 
-# Serve PWA service worker
+# Serve service worker (PWA)
 @app.route("/service-worker.js")
 def service_worker():
     return send_from_directory("static", "service-worker.js")
 
-# Serve PWA manifest file
+# Serve manifest.json (PWA)
 @app.route("/manifest.json")
 def manifest():
     return send_from_directory("static", "manifest.json")
 
-# Run app with eventlet (Render-compatible port binding)
+# Optional: Serve van icon or other static assets explicitly if needed
+@app.route("/static/<path:path>")
+def send_static(path):
+    return send_from_directory("static", path)
+
+# Start the app
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))  # Use Render's PORT or fallback to 5000
+    port = int(os.environ.get("PORT", 10000))  # Default to 10000 if PORT not set
     socketio.run(app, host="0.0.0.0", port=port)
