@@ -27,5 +27,6 @@ async function updateMap() {
 
 fetchLocation().then(loc => {
   initMap(loc.lat, loc.lon);
-  setInterval(updateMap, 3000); // update every 3 seconds
+  setInterval(updateMap, 3000); 
 });
+
