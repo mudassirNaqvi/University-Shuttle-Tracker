@@ -5,19 +5,16 @@
   <title>University Shuttle Tracker</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- ✅ PWA Meta -->
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#1976d2" />
-  <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+  <link rel="apple-touch-icon" href="/static/icons/icon-192x192.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
 
-  <!-- ✅ Google Fonts & Leaflet -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
-  <!-- ✅ Custom Styles -->
   <style>
     body {
       margin: 0;
@@ -38,7 +35,6 @@
     #map {
       height: calc(100vh - 60px);
       width: 100%;
-      z-index: 1;
     }
 
     #install-btn {
@@ -55,11 +51,6 @@
       box-shadow: 0 4px 10px rgba(0,0,0,0.2);
       display: none;
       cursor: pointer;
-      transition: background 0.3s;
-    }
-
-    #install-btn:hover {
-      background-color: #0d5cb6;
     }
 
     .rotated-icon {
@@ -72,8 +63,62 @@
   <div id="map"></div>
   <button id="install-btn">📥 Install App</button>
 
-  <!-- ✅ Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyD11rsR9f63WVv_BETeK5u0S-s_dpIncJM",
+      authDomain: "shuttle-tracker-4f151.firebaseapp.com",
+      projectId: "shuttle-tracker-4f151",
+      messagingSenderId: "983403439545",
+      appId: "1:983403439545:web:f23b51374ddd80db5f8268"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const messaging = firebase.messaging();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then(reg => {
+          console.log('✅ Service Worker registered!', reg);
+
+          messaging.getToken({
+            vapidKey: "BCKQxazfdxh7O7KCbVHaFmhIgWxWXJRll7dn7yF98cWvwOyRURxA-4EeErX7Cet12eNvQnMAb-0dLWkshgYMJkM",
+            serviceWorkerRegistration: reg
+          }).then((token) => {
+            console.log("📱 FCM Token:", token);
+
+            fetch("/register-token", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ token })
+            }).then(res => res.json())
+              .then(data => {
+                if (data.status === "success") {
+                  console.log("✅ Token registered with backend");
+                } else {
+                  console.warn("❌ Token registration failed:", data.message);
+                }
+              });
+
+          }).catch((err) => {
+            console.warn("❌ Token error:", err);
+          });
+        })
+        .catch(err => console.error('❌ SW registration failed:', err));
+    }
+
+    messaging.onMessage((payload) => {
+      console.log("🔔 Foreground notification:", payload);
+      alert(`${payload.notification.title}\n${payload.notification.body}`);
+    });
+  </script>
+
   <script>
     let map, marker, previousPos = null;
 
@@ -89,12 +134,12 @@
       }).addTo(map);
 
       const vanIconDiv = L.divIcon({
-        html: `<img id="van-img" src="/van.png" width="50" height="50" style="transform: rotate(0deg);" class="rotated-icon">`,
+        html: `<img id="van-img" src="/static/van.png" width="50" height="50" style="transform: rotate(0deg);" class="rotated-icon">`,
         iconSize: [50, 50],
         className: ""
       });
 
-      marker = L.marker(position, { icon: vanIconDiv }).addTo(map).bindPopup("University Van").openPopup();
+      marker = L.marker(position, { icon: vanIconDiv }).addTo(map).bindPopup("University Shuttle").openPopup();
       previousPos = position;
     }
 
@@ -103,8 +148,7 @@
       const [lat2, lon2] = to;
       const rad = Math.PI / 180;
       const y = Math.sin((lon2 - lon1) * rad) * Math.cos(lat2 * rad);
-      const x = Math.cos(lat1 * rad) * Math.sin(lat2 * rad) -
-                Math.sin(lat1 * rad) * Math.cos(lat2 * rad) * Math.cos((lon2 - lon1) * rad);
+      const x = Math.cos(lat1 * rad) * Math.sin(lat2 * rad) - Math.sin(lat1 * rad) * Math.cos(lat2 * rad) * Math.cos((lon2 - lon1) * rad);
       const angle = Math.atan2(y, x) * (180 / Math.PI);
       return (angle + 360) % 360;
     }
@@ -140,7 +184,6 @@
       updateLocation(data.lat, data.lon);
     });
 
-    // PWA install logic
     let deferredPrompt;
     const installBtn = document.getElementById("install-btn");
 
@@ -155,20 +198,13 @@
         deferredPrompt.prompt();
         deferredPrompt.userChoice.then(choiceResult => {
           if (choiceResult.outcome === 'accepted') {
-            console.log('User accepted install');
+            console.log('✅ User accepted install');
           }
           deferredPrompt = null;
           installBtn.style.display = "none";
         });
       }
     });
-
-    // Service Worker registration
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/service-worker.js')
-        .then(reg => console.log('Service Worker registered!', reg))
-        .catch(err => console.error('SW registration failed:', err));
-    }
   </script>
 </body>
 </html>
