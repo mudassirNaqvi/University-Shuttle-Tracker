@@ -77,6 +77,19 @@ def check_geofence(lat, lon):
             return dept
     return None
 
+
+from math import radians, cos, sin, asin, sqrt
+def estimate_eta_minutes(lat, lon):
+    cs_lat, cs_lon = DEPARTMENTS["Computer Science"]
+    R = 6371  # km
+    dlat = radians(cs_lat - lat)
+    dlon = radians(cs_lon - lon)
+    a = sin(dlat/2)**2 + cos(radians(lat)) * cos(radians(cs_lat)) * sin(dlon/2)**2
+    c = 2 * asin(sqrt(a))
+    dist_km = R * c
+    speed_kmh = 20.0  # assume 20 km/h
+    return int((dist_km / speed_kmh) * 60)
+
 # ------------------ Routes ------------------
 
 @app.route("/")
@@ -85,7 +98,10 @@ def index():
 
 @app.route("/location")
 def get_location():
-    return jsonify(load_location())
+    loc = load_location()
+    
+    loc["eta_min"] = estimate_eta_minutes(loc["lat"], loc["lon"])
+    return jsonify(loc)
 
 @app.route("/update", methods=["POST"])
 def update_location():
@@ -98,7 +114,13 @@ def update_location():
             lat = float(lat)
             lon = float(lon)
             save_location(lat, lon)
-            socketio.emit("location_update", {"lat": lat, "lon": lon})
+
+            
+            socketio.emit("location_update", {
+                "lat": lat,
+                "lon": lon,
+                "eta_min": estimate_eta_minutes(lat, lon)
+            })
 
             dept = check_geofence(lat, lon)
             if dept:
